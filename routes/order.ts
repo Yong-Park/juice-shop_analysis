@@ -16,6 +16,8 @@ import config from 'config'
 import * as utils from '../lib/utils'
 import * as db from '../data/mongodb'
 import { challenges, products } from '../data/datacache'
+import logEvent from '../lib/loggerElasticsearch';
+
 
 const fs = require('fs')
 const PDFDocument = require('pdfkit')
@@ -40,6 +42,15 @@ module.exports = function placeOrder () {
           const email = customer ? customer.data ? customer.data.email : '' : ''
           const orderId = security.hash(email).slice(0, 4) + '-' + utils.randomHexString(16)
           const pdfFile = `order_${orderId}.pdf`
+
+          // Log de inicio de la creación de la orden
+          await logEvent('order_creation_started', {
+            email,
+            orderId,
+            basketId: id,
+            timestamp: new Date()
+          });
+
           const doc = new PDFDocument()
           const date = new Date().toJSON().slice(0, 10)
           const fileWriter = doc.pipe(fs.createWriteStream(path.join('ftp/', pdfFile)))
@@ -48,6 +59,16 @@ module.exports = function placeOrder () {
             void basket.update({ coupon: null })
             await BasketItemModel.destroy({ where: { BasketId: id } })
             res.json({ orderConfirmation: orderId })
+
+            // Log de confirmación de la orden
+            await logEvent('order_confirmed', {
+              orderId,
+              email,
+              totalPrice,
+              discountAmount,
+              deliveryAmount,
+              timestamp: new Date()
+            });
           })
 
           doc.font('Times-Roman', 40).text(config.get<string>('application.name'), { align: 'center' })

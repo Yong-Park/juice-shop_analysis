@@ -1,10 +1,6 @@
-/*
- * Copyright (c) 2014-2024 Bjoern Kimminich & the OWASP Juice Shop contributors.
- * SPDX-License-Identifier: MIT
- */
-
 import { type Request, type Response, type NextFunction } from 'express'
 import { DeliveryModel } from '../models/delivery'
+import logEvent from '../lib/loggerElasticsearch'
 
 const security = require('../lib/insecurity')
 
@@ -22,6 +18,15 @@ module.exports.getDeliveryMethods = function getDeliveryMethods () {
           icon: method.icon
         })
       }
+
+      // Log de obtención de métodos de entrega
+      await logEvent('get_delivery_methods', {
+        user: req.user || 'anonymous',
+        totalMethods: methods.length,
+        deluxeUser: security.isDeluxe(req),
+        timestamp: new Date()
+      })
+
       res.status(200).json({ status: 'success', data: sendMethods })
     } else {
       res.status(400).json({ status: 'error' })
@@ -40,6 +45,16 @@ module.exports.getDeliveryMethod = function getDeliveryMethod () {
         eta: method.eta,
         icon: method.icon
       }
+
+      // Log de obtención de un método de entrega específico
+      await logEvent('get_delivery_method', {
+        user: req.user || 'anonymous',
+        methodId: method.id,
+        methodName: method.name,
+        deluxeUser: security.isDeluxe(req),
+        timestamp: new Date()
+      })
+
       res.status(200).json({ status: 'success', data: sendMethod })
     } else {
       res.status(400).json({ status: 'error' })

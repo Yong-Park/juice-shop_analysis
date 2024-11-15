@@ -6,6 +6,7 @@
 import { type Request, type Response, type NextFunction } from 'express'
 import { type Captcha } from '../data/types'
 import { CaptchaModel } from '../models/captcha'
+import logEvent from '../lib/loggerElasticsearch'
 
 function captchas () {
   return async (req: Request, res: Response) => {
@@ -29,6 +30,13 @@ function captchas () {
     }
     const captchaInstance = CaptchaModel.build(captcha)
     await captchaInstance.save()
+    // Log the creation of a new CAPTCHA
+    await logEvent('captcha_creation', {
+      captchaId,
+      expression,
+      answer,
+      timestamp: new Date()
+    })
     res.json(captcha)
   }
 }

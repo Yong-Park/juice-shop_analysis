@@ -7,6 +7,8 @@ import { type Request, type Response, type NextFunction } from 'express'
 import { UserModel } from '../models/user'
 import challengeUtils = require('../lib/challengeUtils')
 import * as utils from '../lib/utils'
+import logEvent from '../lib/loggerElasticsearch'
+
 
 const security = require('../lib/insecurity')
 const cache = require('../data/datacache')
@@ -17,14 +19,14 @@ module.exports = function updateUserProfile () {
     const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
 
     if (loggedInUser) {
-      UserModel.findByPk(loggedInUser.data.id).then((user: UserModel | null) => {
+      UserModel.findByPk(loggedInUser.data.id).then(async (user: UserModel | null) => {
         if (user != null) {
           challengeUtils.solveIf(challenges.csrfChallenge, () => {
-            return ((req.headers.origin?.includes('://htmledit.squarefree.com')) ??
+            return ((req.headers.origin?.includes('://htmledit.squarefree.com')) ?? 
               (req.headers.referer?.includes('://htmledit.squarefree.com'))) &&
               req.body.username !== user.username
           })
-          void user.update({ username: req.body.username }).then((savedUser: UserModel) => {
+          void user.update({ username: req.body.username }).then(async (savedUser: UserModel) => {
             // @ts-expect-error FIXME some properties missing in savedUser
             savedUser = utils.queryResultToJson(savedUser)
             const updatedToken = security.authorize(savedUser)
@@ -32,6 +34,16 @@ module.exports = function updateUserProfile () {
             res.cookie('token', updatedToken)
             res.location(process.env.BASE_PATH + '/profile')
             res.redirect(process.env.BASE_PATH + '/profile')
+            
+            // Registro en Elasticsearch
+            await logEvent('update_user_profile', {
+              userId: savedUser.id,
+              newUsername: req.body.username,
+              origin: req.headers.origin || 'unknown',
+              referer: req.headers.referer || 'unknown',
+              ip: req.socket.remoteAddress,
+              timestamp: new Date()
+            })
           })
         }
       }).catch((error: Error) => {
@@ -42,3 +54,4 @@ module.exports = function updateUserProfile () {
     }
   }
 }
+
